@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>World Lab — Vestibule Probe</title>
+<style>
+:root{color-scheme:light;--ink:#242424;--ghost:rgba(25,25,25,.16)}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f8f8f5}
+body{font-family:ui-sans-serif,system-ui,sans-serif;touch-action:pan-y}
+#room{position:fixed;inset:0;perspective:900px;overflow:hidden;background:radial-gradient(ellipse at 50% 48%,#fff 0 32%,#fafaf7 58%,#f4f4f0 100%)}
+#space{position:absolute;inset:-4%;transform-style:preserve-3d;transition:transform .14s ease-out}
+.trace{position:absolute;height:1px;background:linear-gradient(90deg,transparent,var(--ghost) 35%,var(--ghost) 65%,transparent);transform-origin:center}
+.t1{width:70%;left:15%;top:75%;transform:rotate(0deg)}.t2{width:48%;left:-5%;top:53%;transform:rotate(63deg)}.t3{width:48%;right:-5%;top:53%;transform:rotate(-63deg)}
+.portal{position:absolute;width:min(27vw,210px);aspect-ratio:.61;cursor:pointer;transform-style:preserve-3d;filter:drop-shadow(0 8px 10px rgba(0,0,0,.04));transition:transform .75s cubic-bezier(.2,.8,.2,1),opacity .55s ease}
+.portal.center{left:50%;top:48%;transform:translate(-50%,-50%) translateZ(30px)}
+.portal.left{left:15%;top:50%;transform:translate(-50%,-50%) rotateY(24deg) scale(.88)}
+.portal.right{left:85%;top:50%;transform:translate(-50%,-50%) rotateY(-24deg) scale(.88)}
+.frame{position:absolute;inset:0;clip-path:polygon(9% 0,91% 0,100% 7%,100% 100%,0 100%,0 7%);background:#2b2b29}
+.reveal{position:absolute;inset:2px;clip-path:inherit;background:#e9e9e4}
+.view{position:absolute;inset:7px;clip-path:polygon(8% 0,92% 0,100% 7%,100% 100%,0 100%,0 7%);overflow:hidden;background:#ddd}
+.view img{width:108%;height:108%;object-fit:cover;position:absolute;left:-4%;top:-4%;transition:transform .16s ease-out}
+.label{position:absolute;left:50%;top:calc(100% + 14px);transform:translateX(-50%);white-space:nowrap;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(20,20,20,.52)}
+.portal::after{content:"";position:absolute;left:9%;right:9%;bottom:-9px;height:10px;background:linear-gradient(to bottom,rgba(0,0,0,.12),transparent);filter:blur(4px)}
+#room.entering .portal:not(.chosen){opacity:0}
+#room.entering .chosen{z-index:10;transform:translate(-50%,-50%) translateZ(650px) scale(2.1)}
+#room.entering .chosen.left,#room.entering .chosen.right{transform:translate(-50%,-50%) translateZ(650px) scale(2.1)}
+#room.entering .trace{opacity:0;transition:opacity .35s}
+.hint{position:absolute;bottom:max(24px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:rgba(20,20,20,.28)}
+@media(max-width:600px){
+ .portal{width:38vw;max-width:168px}.portal.left{left:4%;transform:translate(-50%,-50%) rotateY(31deg) scale(.82)}.portal.right{left:96%;transform:translate(-50%,-50%) rotateY(-31deg) scale(.82)}
+ .portal.center{top:46%}.trace.t1{top:72%}
+}
+</style></head>
+<body><div id="room"><div id="space">
+<div class="trace t1"></div><div class="trace t2"></div><div class="trace t3"></div>
+<div class="portal left" data-x="-1"><div class="frame"></div><div class="reveal"></div><div class="view"><img src="assets/portals/foundry.png"></div><div class="label">Foundry</div></div>
+<div class="portal center" data-x="0"><div class="frame"></div><div class="reveal"></div><div class="view"><img src="assets/portals/six-cities.png"></div><div class="label">Six Cities</div></div>
+<div class="portal right" data-x="1"><div class="frame"></div><div class="reveal"></div><div class="view"><img src="assets/portals/orbital-construction.png"></div><div class="label">Orbital Construction</div></div>
+</div><div class="hint">tap a doorway</div></div>
+<script>
+const room=document.querySelector('#room'),space=document.querySelector('#space'),portals=[...document.querySelectorAll('.portal')];
+let px=0,py=0,tx=0,ty=0;
+function point(x,y){tx=(x/innerWidth-.5);ty=(y/innerHeight-.5)}
+addEventListener('pointermove',e=>point(e.clientX,e.clientY),{passive:true});
+addEventListener('deviceorientation',e=>{if(e.gamma!=null){tx=Math.max(-.5,Math.min(.5,e.gamma/40));ty=Math.max(-.5,Math.min(.5,(e.beta-45)/50))}},{passive:true});
+function tick(){px+=(tx-px)*.045;py+=(ty-py)*.045;space.style.transform=`translate(${px*-7}px,${py*-4}px) rotateY(${px*1.1}deg) rotateX(${py*-.6}deg)`;portals.forEach(p=>{const im=p.querySelector('img'),d=Number(p.dataset.x);im.style.transform=`translate(${px*(-5-d*2)}px,${py*-3}px) scale(1.015)`});requestAnimationFrame(tick)}tick();
+portals.forEach(p=>p.addEventListener('click',()=>{if(room.classList.contains('entering'))return;p.classList.add('chosen');room.classList.add('entering');setTimeout(()=>{room.classList.remove('entering');p.classList.remove('chosen')},1050)}));
+</script></body></html>
