@@ -4,7 +4,9 @@ A laboratory for rapidly probing systems across different world substrates.
 
 ## Continuous collaboration setup
 
-This repository is being configured so that a human can work with ChatGPT conversationally while ChatGPT updates the executable artifact in GitHub and GitHub publishes the result automatically. The intended loop is:
+This repository is configured so that a human can work with ChatGPT conversationally while ChatGPT updates the executable artifact in GitHub and GitHub Pages publishes the accepted `main` branch automatically.
+
+The proven loop is:
 
 ```text
 human intent
@@ -12,13 +14,26 @@ human intent
 → model clarifies only what matters
 → model states the proposed delta
 → human confirms
-→ model edits and validates the repository
-→ GitHub deploys automatically
+→ model edits and validates the artifact
+→ model commits the accepted head to main
+→ GitHub Pages publishes automatically
 → human refreshes the stable URL and plays
 → repeat
 ```
 
-The human should not need to manually download, rename, save, upload, or move artifact files between iterations.
+The human does not need to manually rename, save, upload, or move artifact files to publish an accepted build.
+
+For rapid development, a locally downloaded/opened artifact can still be used for immediate inspection. GitHub Pages is the continuously published head, not the low-latency development runtime.
+
+## Live site
+
+World Lab is published at:
+
+https://bonoj.github.io/world-lab/
+
+This is a **project Pages site**, so `/world-lab/` is part of the URL. The bare `bonoj.github.io` address is a different site namespace.
+
+The first end-to-end Pages deployment was confirmed from the phone at **11:04 PM on September 24, 2026 (America/New_York)**.
 
 ## GitHub / ChatGPT write access
 
@@ -29,6 +44,7 @@ World Lab currently uses:
 - repository: `bonoj/world-lab`
 - default branch: `main`
 - visibility: public
+- executable entry point: `/index.html`
 
 A separate repository can be used for another person's World Lab.
 
@@ -80,7 +96,7 @@ Our verified probe:
 - file: `chatgpt-write-probe.txt`
 - commit: `fb531b8945a27eb02c6211d4fd1ec97a23d76a39`
 
-That proved this path:
+That proved:
 
 ```text
 phone
@@ -91,25 +107,70 @@ phone
 
 Do not assume the setup works merely because ChatGPT can read the repository. Verify an actual write.
 
-## Continuous deployment
+### 5. Verify large executable transport
 
-**Status: not configured yet.**
+The current World Lab is a self-contained HTML artifact of roughly 1 MB. The ordinary small-file write path was not allowed to dictate the artifact architecture.
 
-The next step is to publish the executable World Lab automatically with GitHub Pages so every accepted repository update becomes available at a stable browser URL.
+The successful transport path was:
 
-Once the deployment path is working and verified from the phone, this section will be replaced with the exact setup we used rather than speculative instructions.
+```text
+uploaded World Lab HTML
+→ Git blob
+→ Git tree
+→ Git commit
+→ update main ref
+```
 
-Target path:
+The first full executable commit was:
+
+```text
+a38714fb342baa0ed956e359c74c1358fd94858a
+```
+
+After that commit, `index.html` was fetched back from `main`, downloaded on the phone, opened in the browser, and confirmed working before Pages was enabled.
+
+This matters because a connector limitation is not a reason to split or redesign an otherwise coherent executable artifact.
+
+## Continuous deployment with GitHub Pages
+
+**Status: configured and verified.**
+
+No custom GitHub Actions workflow or build system is required for the current self-contained HTML artifact.
+
+Repository configuration:
+
+```text
+Repository
+→ Settings
+→ Pages
+→ Build and deployment
+→ Source: Deploy from a branch
+→ Branch: main
+→ Folder: /(root)
+→ Save
+```
+
+GitHub then reports:
+
+```text
+Your GitHub Pages site is currently being built from the main branch.
+```
+
+Because `index.html` lives at the repository root, accepted commits to `main` become the next published World Lab automatically.
+
+The deployment path has now been verified end-to-end:
 
 ```text
 phone
 → conversation
 → confirmed artifact mutation
-→ GitHub commit
-→ automatic GitHub Pages deployment
-→ stable World Lab URL
+→ GitHub commit to main
+→ automatic GitHub Pages publication
+→ https://bonoj.github.io/world-lab/
 → refresh and inspect
 ```
+
+Pages publication is asynchronous and should not be treated as the rapid development loop. We have not yet measured steady-state commit-to-live latency; that should be measured during ordinary future changes rather than guessed from initial provisioning.
 
 ## Collaboration rule
 
@@ -122,9 +183,10 @@ The working interaction remains:
 3. Model resolves consequential ambiguity with the smallest useful clarification.
 4. Model states the concrete proposed change.
 5. Human confirms.
-6. Model edits, validates, and commits.
-7. Deployment produces executable evidence.
-8. Human inspects that evidence and continues the conversation.
+6. Model edits and validates.
+7. Model commits the accepted head to `main`.
+8. GitHub Pages publishes it.
+9. Human inspects the executable evidence and continues the conversation.
 
 Inference can reduce communication cost. It should not silently replace human intention.
 
@@ -137,6 +199,13 @@ The infrastructure should disappear underneath the collaboration. A person exten
 
 Git, deployment, file transfer, and version bookkeeping are implementation machinery, not the interaction model.
 
+A minimal user experience can therefore be two browser tabs:
+
+```text
+Tab 1: talk to ChatGPT about the world
+Tab 2: refresh the published World Lab and play
+```
+
 ---
 
-This README is intentionally being written from a setup that has been performed and tested on a phone. Unverified deployment instructions are left explicitly unfinished until the deployment seam itself has been proven.
+This README records a setup that was actually performed and tested from a phone. Where behavior has not yet been measured—such as steady-state Pages deployment latency—it is left explicitly unclaimed rather than replaced with speculative instructions.
