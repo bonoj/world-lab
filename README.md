@@ -109,9 +109,9 @@ Do not assume the setup works merely because ChatGPT can read the repository. Ve
 
 ### 5. Verify large executable transport
 
-The current World Lab is a self-contained HTML artifact of roughly 1 MB. The ordinary small-file write path was not allowed to dictate the artifact architecture.
+World Lab remains a single self-contained HTML artifact. The ordinary small-file write path is not allowed to dictate the artifact architecture.
 
-The successful transport path was:
+The first successful large-artifact publication used the raw Git object path:
 
 ```text
 uploaded World Lab HTML
@@ -121,15 +121,85 @@ uploaded World Lab HTML
 → update main ref
 ```
 
-The first full executable commit was:
+That historical solution is preserved in the repository history; the first full executable commit was:
 
 ```text
 a38714fb342baa0ed956e359c74c1358fd94858a
 ```
 
-After that commit, `index.html` was fetched back from `main`, downloaded on the phone, opened in the browser, and confirmed working before Pages was enabled.
+As World Lab grew to 6,977,815 bytes, a single connector request stopped being a reliable transport. The replacement is an interruption-safe, multi-turn transport protocol. It treats the accepted artifact as opaque release bytes and moves transport state into GitHub rather than relying on one ChatGPT turn or conversation context.
 
-This matters because a connector limitation is not a reason to split or redesign an otherwise coherent executable artifact.
+The proven large-file path is now:
+
+```text
+accepted artifact
+→ compute exact byte count + expected Git blob SHA
+→ split transport representation into numbered connector-safe chunks
+→ persist chunks + manifest on a world-lab-transport-* branch
+→ GitHub Actions reconstructs the bytes
+→ receiver verifies byte count + exact Git blob SHA
+→ receiver creates a clean candidate commit based directly on declared main
+→ ChatGPT independently verifies candidate parent + index.html blob SHA
+→ fast-forward main with force disabled
+→ GitHub Pages publishes automatically
+```
+
+The receiver lives on the transport branch in:
+
+```text
+scripts/world_lab_transport_receiver.py
+.github/workflows/world-lab-transport.yml
+```
+
+The manifest is the durable checkpoint and publication contract. It records at least:
+
+```text
+base_commit
+destination
+encoding
+compression
+ordered payload.NNN chunk names
+expected_bytes
+expected_git_blob_sha
+candidate_branch
+```
+
+#### Multi-turn / interruption recovery
+
+Transport progress must be recoverable from GitHub alone.
+
+A resumed or completely new conversation should:
+
+1. Inspect the transport branch and manifest.
+2. Enumerate the already-persisted `payload.NNN` chunks.
+3. Continue with the first missing chunk rather than retransmitting completed work.
+4. Trigger reconstruction only when the declared chunk set is complete.
+5. Treat receiver failure as a hard stop; never compensate by weakening byte/SHA checks.
+6. Verify the generated candidate independently before touching `main`.
+7. Confirm `main` has not moved away from the manifest's `base_commit`; if it has, stop and deliberately rebase/reissue the release rather than force-pushing.
+8. Move `main` only by non-force fast-forward to the verified candidate.
+
+No conversational memory is required for correctness. GitHub is the checkpoint store.
+
+#### Verified failure behavior
+
+The first real multi-turn publication intentionally demonstrated the safety property: reconstruction found the staged artifact was one byte short (`6,977,814` vs. `6,977,815`) and refused to publish it. After the missing final byte was restored, reconstruction succeeded and produced the exact expected blob:
+
+```text
+cb4412192eba404dac637856246a4e7acc922a5b
+```
+
+The verified clean publication commit was:
+
+```text
+ad66993de9d810f7f317ae521ddffed6d5c76791
+```
+
+Its parent was the previously captured `main`, and `main:index.html` was fetched again after the fast-forward and independently confirmed to have the same expected blob SHA.
+
+The current receiver accepts both `base64 + gzip` and `utf-8 + none` transport manifests. Chunk size is a transport implementation detail and may be reduced whenever connector limits require it; the artifact itself does not need to be split, minified, refactored, or redesigned.
+
+This matters because a connector limitation is not a reason to change the semantic architecture of an otherwise coherent executable artifact.
 
 ## Continuous deployment with GitHub Pages
 
