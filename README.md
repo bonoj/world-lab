@@ -6,24 +6,21 @@ A laboratory for rapidly probing systems across different world substrates.
 
 This repository is configured so that a human can work with ChatGPT conversationally while ChatGPT updates the executable artifact in GitHub and GitHub Pages publishes the accepted `main` branch automatically.
 
-The proven loop is:
+The normal loop is:
 
 ```text
 human intent
 → model inspects the artifact
 → model clarifies only what matters
-→ model states the proposed delta
-→ human confirms
-→ model edits and validates the artifact
-→ model commits the accepted head to main
+→ model edits and validates
+→ verified candidate
+→ accepted candidate fast-forwards main
 → GitHub Pages publishes automatically
 → human refreshes the stable URL and plays
 → repeat
 ```
 
-The human does not need to manually rename, save, upload, or move artifact files to publish an accepted build.
-
-For rapid development, a locally downloaded/opened artifact can still be used for immediate inspection. GitHub Pages is the continuously published head, not the low-latency development runtime.
+The infrastructure must adapt to the artifact. Connector limits are not a reason to split, minify, refactor, or otherwise redesign a coherent executable merely to make transport easier.
 
 ## Live site
 
@@ -31,181 +28,158 @@ World Lab is published at:
 
 https://bonoj.github.io/world-lab/
 
-This is a **project Pages site**, so `/world-lab/` is part of the URL. The bare `bonoj.github.io` address is a different site namespace.
+This is a project Pages site, so `/world-lab/` is part of the URL.
 
-The first end-to-end Pages deployment was confirmed from the phone at **11:04 PM on September 24, 2026 (America/New_York)**.
+Repository:
+
+- `bonoj/world-lab`
+- default branch: `main`
+- Pages source: `main` / root
+- executable entry point: `/index.html`
 
 ## GitHub / ChatGPT write access
 
-### 1. Create or choose the repository
+World Lab uses the ChatGPT Codex Connector installed on the GitHub account with access to this repository. Read access alone does not prove write access; the original setup was verified with a harmless repository write before publishing real work.
 
-World Lab currently uses:
+The first end-to-end Pages deployment was confirmed from a phone on September 24, 2026.
 
-- repository: `bonoj/world-lab`
-- default branch: `main`
-- visibility: public
-- executable entry point: `/index.html`
+## Artifact transport
 
-A separate repository can be used for another person's World Lab.
+### Why there is a receiver
 
-### 2. Connect GitHub to ChatGPT
+Small UTF-8 repository writes are straightforward through the connector. Large self-contained executables and opaque/binary artifacts need a transport that does not make connector request size or representation constraints part of the artifact architecture.
 
-Authorize the **ChatGPT Codex Connector** for the GitHub account from ChatGPT.
-
-GitHub may show this authorization under:
+The first roughly 1 MB World Lab publication succeeded by obtaining essentially the complete HTML as text and supplying that string to GitHub's Git-object APIs:
 
 ```text
-GitHub
-→ Settings
-→ Applications
-→ Authorized GitHub Apps
-→ ChatGPT Codex Connector
+artifact text
+→ create_blob
+→ create_tree
+→ create_commit
+→ update_ref
 ```
 
-Authorization alone is not sufficient for repository writes.
+That did **not** prove a dedicated conversation-file → Git-blob adapter.
 
-### 3. Install the ChatGPT Codex Connector on the GitHub account
+When World Lab grew to roughly 7 MB, a one-shot connector call was no longer a reliable transport seam. The repository therefore gained a GitHub Actions receiver that reconstructs artifacts from small connector-safe chunks and verifies the result before creating a candidate commit.
 
-Official installation page:
+### Universal opaque-artifact transport
 
-https://github.com/apps/chatgpt-codex-connector/installations/new
-
-Install it on the GitHub account that owns the repository.
-
-For least privilege, choose:
+The current receiver is:
 
 ```text
-Only select repositories
-→ select the World Lab repository
+scripts/world_lab_transport_receiver.py
 ```
 
-This installation step matters. In our first attempt the connector was authorized but **not installed on the account**. Reads were possible, but repository-content writes failed with:
+The workflow is:
 
 ```text
-403 Resource not accessible by integration
+.github/workflows/world-lab-transport.yml
 ```
 
-After installing the connector on `bonoj` with access to `world-lab`, the same conversational write succeeded.
+The receiver supports both the historical v1 single-artifact manifest and the current **v2 multi-artifact manifest**.
 
-### 4. Verify the write seam before doing real work
+A v2 manifest can transport one or more opaque artifacts to arbitrary safe repository paths:
 
-Ask ChatGPT to create a harmless probe file in the repository.
-
-Our verified probe:
-
-- file: `chatgpt-write-probe.txt`
-- commit: `fb531b8945a27eb02c6211d4fd1ec97a23d76a39`
-
-That proved:
-
-```text
-phone
-→ ChatGPT conversation
-→ GitHub connector
-→ repository commit
+```json
+{
+  "version": 2,
+  "base_commit": "<40-hex commit>",
+  "candidate_branch": "world-lab-publish-candidate-example",
+  "artifacts": [
+    {
+      "destination": "index.html",
+      "encoding": "utf-8",
+      "compression": "none",
+      "chunks": ["html/payload.000", "html/payload.001"],
+      "expected_bytes": 123456,
+      "expected_git_blob_sha": "<40-hex Git blob SHA>"
+    },
+    {
+      "destination": "assets/example.bin",
+      "encoding": "base64",
+      "compression": "none",
+      "chunks": ["binary/payload.000"],
+      "expected_bytes": 789,
+      "expected_git_blob_sha": "<40-hex Git blob SHA>"
+    }
+  ]
+}
 ```
 
-Do not assume the setup works merely because ChatGPT can read the repository. Verify an actual write.
+Supported representations are:
 
-### 5. Verify large executable transport
+- `utf-8` + `none`
+- `base64` + `none`
+- `base64` + `gzip`
 
-The current World Lab is a self-contained HTML artifact of roughly 1 MB. The ordinary small-file write path was not allowed to dictate the artifact architecture.
+Chunks must be contiguous ordered `payload.NNN` files within one artifact directory. Binary data is carried as base64 text; the receiver reconstructs the original bytes on the GitHub runner.
 
-The successful transport path was:
+### Verification and safety contract
 
-```text
-uploaded World Lab HTML
-→ Git blob
-→ Git tree
-→ Git commit
-→ update main ref
-```
+For every artifact the receiver:
 
-The first full executable commit was:
+1. validates destination and chunk paths;
+2. reconstructs the exact bytes;
+3. verifies `expected_bytes`;
+4. computes the canonical Git blob SHA over `blob <length>\0<bytes>`;
+5. refuses publication if the SHA differs;
+6. creates a detached worktree from the manifest's exact `base_commit`;
+7. writes only the declared destinations;
+8. independently checks each destination with `git hash-object`;
+9. creates one clean candidate commit whose parent must equal the declared base;
+10. pushes only the declared candidate branch.
 
-```text
-a38714fb342baa0ed956e359c74c1358fd94858a
-```
+The receiver **never updates `main`**. Promotion to `main` is a separate explicit fast-forward after the candidate has been inspected and verified.
 
-After that commit, `index.html` was fetched back from `main`, downloaded on the phone, opened in the browser, and confirmed working before Pages was enabled.
+This makes interrupted conversations recoverable: persisted GitHub chunks and manifests are checkpoints. Conversation continuity is not part of publication correctness.
 
-This matters because a connector limitation is not a reason to split or redesign an otherwise coherent executable artifact.
+### Proven large-release path
 
-## Continuous deployment with GitHub Pages
+The approximately 7 MB Six Cities World Lab release proved the receiver end-to-end. A first run failed safely on a one-byte mismatch. After the missing final newline was restored, reconstruction succeeded, the resulting `index.html` Git blob matched the expected SHA exactly, and the verified candidate was fast-forwarded to `main`.
 
-**Status: configured and verified.**
+That failure is part of the proof: byte-count and blob-identity gates stopped an inexact artifact from being published.
 
-No custom GitHub Actions workflow or build system is required for the current self-contained HTML artifact.
+### Binary ingress boundary
 
-Repository configuration:
+The universal receiver can reconstruct binary artifacts exactly **once their bytes have been represented as connector-safe base64 chunks**.
 
-```text
-Repository
-→ Settings
-→ Pages
-→ Build and deployment
-→ Source: Deploy from a branch
-→ Branch: main
-→ Folder: /(root)
-→ Save
-```
+A separate experiment with GitHub issue image attachments established a current ingress limitation: issue attachments are exposed as `github.com/user-attachments/assets/...`, while the available connector operations do not currently provide a proven path from those attachment bytes directly into a Git blob or the receiver's base64 chunk strings.
 
-GitHub then reports:
+That is an **ingress limitation, not a receiver limitation**.
 
-```text
-Your GitHub Pages site is currently being built from the main branch.
-```
+For binary files already on the human's device, direct GitHub upload is therefore a valid practical ingress path. Do not redesign or revert the universal receiver because of this boundary. If a future connector exposes file/stream-aware Git writes, that ingress path can be replaced without changing the receiver's verification model.
 
-Because `index.html` lives at the repository root, accepted commits to `main` become the next published World Lab automatically.
+## GitHub Pages
 
-The deployment path has now been verified end-to-end:
+GitHub Pages publishes `main` / root automatically. No Pages-specific build system is required for the self-contained World Lab executable.
+
+The publication path is:
 
 ```text
-phone
-→ conversation
-→ confirmed artifact mutation
-→ GitHub commit to main
-→ automatic GitHub Pages publication
+verified candidate
+→ fast-forward main
+→ GitHub Pages
 → https://bonoj.github.io/world-lab/
-→ refresh and inspect
 ```
 
-Pages publication is asynchronous and should not be treated as the rapid development loop. We have not yet measured steady-state commit-to-live latency; that should be measured during ordinary future changes rather than guessed from initial provisioning.
+Pages publication is asynchronous and is not the low-latency development runtime.
 
 ## Collaboration rule
 
 Repository access removes file-handling friction; it does not remove human authorship.
 
-The working interaction remains:
-
-1. Human expresses intent.
-2. Model inspects current artifact and context.
-3. Model resolves consequential ambiguity with the smallest useful clarification.
-4. Model states the concrete proposed change.
-5. Human confirms.
-6. Model edits and validates.
-7. Model commits the accepted head to `main`.
-8. GitHub Pages publishes it.
-9. Human inspects the executable evidence and continues the conversation.
-
-Inference can reduce communication cost. It should not silently replace human intention.
+Inference can reduce communication cost. It should not silently replace human intention. Ordinary implementation details can be resolved by the model, while consequential semantic changes remain explicit.
 
 ## Why this exists
 
-The infrastructure should disappear underneath the collaboration. A person extending their World Lab should mostly experience two things:
+The infrastructure should disappear underneath the collaboration. A person extending World Lab should mostly experience:
 
 - a conversation;
 - the living executable toy.
 
-Git, deployment, file transfer, and version bookkeeping are implementation machinery, not the interaction model.
-
-A minimal user experience can therefore be two browser tabs:
-
-```text
-Tab 1: talk to ChatGPT about the world
-Tab 2: refresh the published World Lab and play
-```
+Git, deployment, file transfer, reconstruction, hashing, and version bookkeeping are implementation machinery rather than the interaction model.
 
 ---
 
-This README records a setup that was actually performed and tested from a phone. Where behavior has not yet been measured—such as steady-state Pages deployment latency—it is left explicitly unclaimed rather than replaced with speculative instructions.
+This README records mechanisms that were actually exercised. Where a transport path is unproven, it is labeled as such rather than presented as established behavior.
