@@ -1,0 +1,3 @@
+ChatGPT GitHub write probe.
+
+If you can read this in the repository, the phone → conversation → GitHub write seam works.
