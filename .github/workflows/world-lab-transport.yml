@@ -1,0 +1,22 @@
+name: World Lab Transport Receiver
+
+on:
+  push:
+    branches:
+      - world-lab-transport-*
+    paths:
+      - "transport/**"
+
+permissions:
+  contents: write
+
+jobs:
+  reconstruct:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out transport branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconstruct and verify release
+        run: python3 scripts/world_lab_transport_receiver.py
