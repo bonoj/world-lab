@@ -62,8 +62,8 @@ if not HEX40.fullmatch(str(m["expected_git_blob_sha"])):
     fail("invalid expected_git_blob_sha")
 if m["destination"] != "index.html":
     fail("destination must be index.html")
-if m["encoding"] != "base64" or m["compression"] != "gzip":
-    fail("receiver currently requires base64 + gzip")
+if (m["encoding"], m["compression"]) not in {("base64", "gzip"), ("utf-8", "none")}:
+    fail("supported transports are base64+gzip or utf-8+none")
 if not isinstance(m["expected_bytes"], int) or m["expected_bytes"] < 0:
     fail("invalid expected_bytes")
 if not isinstance(m["chunks"], list) or not m["chunks"]:
@@ -78,21 +78,24 @@ if not SAFE_BRANCH.fullmatch(str(m["candidate_branch"])) or ".." in m["candidate
 if m["candidate_branch"] in {"main", "master"}:
     fail("candidate_branch may not be main/master")
 
-encoded_parts = []
+parts = []
 for name in m["chunks"]:
     p = TRANSPORT / name
     if not p.is_file():
         fail(f"missing chunk: {name}")
-    encoded_parts.append(p.read_text("ascii").strip())
+    parts.append(p.read_bytes())
 
-try:
-    packed = base64.b64decode("".join(encoded_parts), validate=True)
-except Exception as e:
-    fail(f"base64 decode failed: {e}")
-try:
-    artifact = gzip.decompress(packed)
-except Exception as e:
-    fail(f"gzip decompression failed: {e}")
+if m["encoding"] == "utf-8" and m["compression"] == "none":
+    artifact = b"".join(parts)
+else:
+    try:
+        packed = base64.b64decode(b"".join(parts), validate=True)
+    except Exception as e:
+        fail(f"base64 decode failed: {e}")
+    try:
+        artifact = gzip.decompress(packed)
+    except Exception as e:
+        fail(f"gzip decompression failed: {e}")
 
 if len(artifact) != m["expected_bytes"]:
     fail(f"byte count mismatch: got {len(artifact)}, expected {m['expected_bytes']}")

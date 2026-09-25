@@ -2,12 +2,21 @@
   "version": 1,
   "base_commit": "4c57831079aafc12df84d9dcb79ec56a5dadb7ab",
   "destination": "index.html",
-  "encoding": "base64",
-  "compression": "gzip",
+  "encoding": "utf-8",
+  "compression": "none",
   "chunks": [
-    "payload.000"
+    "payload.000",
+    "payload.001",
+    "payload.002",
+    "payload.003",
+    "payload.004",
+    "payload.005",
+    "payload.006",
+    "payload.007",
+    "payload.008",
+    "payload.009"
   ],
-  "expected_bytes": 41,
-  "expected_git_blob_sha": "ad519b84422984b28667b841b37a6cc62ade1113",
-  "candidate_branch": "world-lab-publish-candidate-smoke"
+  "expected_bytes": 6977815,
+  "expected_git_blob_sha": "cb4412192eba404dac637856246a4e7acc922a5b",
+  "candidate_branch": "world-lab-publish-candidate-six-cities"
 }
