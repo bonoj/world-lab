@@ -76,7 +76,7 @@ select{width:100%;padding:0 12px;appearance:auto}
 </div>
 
 <script type="text/plain" id="vestibule-semantics">
-WORLD LAB VESTIBULE — SIX CITIES IDENTITY + CONTEXTUAL ACTIONS T0
+WORLD LAB VESTIBULE — PROJECT IDENTITIES + CONTEXTUAL ACTIONS T0
 
 ROLE
 The vestibule is a spatial threshold between the World Lab landing surface and
@@ -217,6 +217,17 @@ time; only physically conflicting arc crossings are reserved out. There are no l
 trails, glows, miniature scenery, or explanatory UI. The mechanism is evidence of six loci exchanging matter, not an
 illustration of six cities.
 
+IDENTITY PROBE — VERTICAL ACCRETION
+Vertical Accretion retains the same opaque neutral white presence as every other project.
+A single tiny embodied worker progressively cuts a dark descending incision into that
+substrate. The cut is irreversible during the visit and therefore reads as accumulated
+physical history rather than an animated decoration. Sparse warm torches are installed
+behind the frontier and persist as traversal infrastructure, making conquered depth legible
+even when the worker has moved on. The probe deliberately begins with only descent,
+excavation evidence, a worker frontier, and persistent light. It does not yet miniaturize
+the standalone lab's broader construction vocabulary; further structure must be earned by
+what this small physical system actually needs.
+
 LAB ENTITIES
 Four presences currently own destinations:
 - Foundry -> https://bonoj.github.io/Foundry/
@@ -339,7 +350,8 @@ const C={
   ObserverReturn:ecs.component('ObserverReturn'),
   LabIdentity:ecs.component('LabIdentity'),
   Destination:ecs.component('Destination'),
-  ExchangeIdentity:ecs.component('ExchangeIdentity')
+  ExchangeIdentity:ecs.component('ExchangeIdentity'),
+  DescentIdentity:ecs.component('DescentIdentity')
 };
 
 const presenceMat=new THREE.MeshStandardMaterial({color:0xf0f0ed,roughness:.68,metalness:.04});
@@ -365,6 +377,9 @@ const presenceEntities=PRESENCES.map((entry,slot)=>{
   if(entry.lab){
     ecs.add(id,C.LabIdentity,{slug:entry.lab.slug,name:entry.lab.name,github:entry.lab.github});
     ecs.add(id,C.Destination,{url:entry.lab.url});
+    if(entry.lab.slug==='VerticalAccretion') ecs.add(id,C.DescentIdentity,{
+      seed:741, stepMs:1450, torchEvery:3, maxSteps:18
+    });
     if(entry.lab.slug==='SixCities') ecs.add(id,C.ExchangeIdentity,{
       nodeCount:6,
       seed:741,
@@ -526,6 +541,74 @@ function ExchangeSystem(now){
 for(const id of ecs.query(C.ExchangeIdentity,C.RenderObject)){
   buildExchangeIdentity(id,C.ExchangeIdentity.get(id));
 }
+
+
+/* VERTICAL ACCRETION IDENTITY — a white substrate carrying irreversible evidence of descent. */
+const descentStates=new Map();
+const trenchMat=new THREE.MeshStandardMaterial({color:0x292724,roughness:.96,metalness:0});
+const workerMat=new THREE.MeshStandardMaterial({color:0x555a5c,roughness:.62,metalness:.22});
+const helmetMat=new THREE.MeshStandardMaterial({color:0xc99843,roughness:.52,metalness:.18});
+const torchMat=new THREE.MeshStandardMaterial({color:0x4b4035,roughness:.9});
+const flameMat=new THREE.MeshBasicMaterial({color:0xffb34d});
+
+function descentPoint(i,max){
+  const t=i/max;
+  const lat=THREE.MathUtils.lerp(.82,-.72,t);
+  const lon=-.42+t*Math.PI*2.15;
+  const r=.586;
+  const c=Math.cos(lat);
+  return new THREE.Vector3(r*c*Math.sin(lon),r*Math.sin(lat),r*c*Math.cos(lon));
+}
+function orientRadial(o,p){
+  o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),p.clone().normalize());
+}
+function addTrenchSegment(state,a,b){
+  const mid=a.clone().add(b).multiplyScalar(.5).normalize().multiplyScalar(.592);
+  const curve=new THREE.QuadraticBezierCurve3(a,mid,b);
+  const trench=new THREE.Mesh(new THREE.TubeGeometry(curve,5,.043,7,false),trenchMat);
+  trench.castShadow=false;trench.receiveShadow=true;state.apparatus.add(trench);
+}
+function addTorch(state,p){
+  const radial=p.clone().normalize(), root=radial.clone().multiplyScalar(.61);
+  const torch=new THREE.Group();
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(.009,.012,.105,6),torchMat);
+  stem.position.y=.045;torch.add(stem);
+  const flame=new THREE.Mesh(new THREE.SphereGeometry(.024,8,6),flameMat);
+  flame.scale.set(.72,1.25,.72);flame.position.y=.112;torch.add(flame);
+  torch.position.copy(root);orientRadial(torch,root);
+  state.apparatus.add(torch);
+  const light=new THREE.PointLight(0xffa33d,.24,.72,2);
+  light.position.copy(radial.clone().multiplyScalar(.73));state.apparatus.add(light);
+}
+function buildDescentIdentity(id,data){
+  const ro=C.RenderObject.get(id);if(!ro)return;
+  const apparatus=new THREE.Group();ro.object.add(apparatus);
+  const worker=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.CapsuleGeometry(.035,.075,3,6),workerMat);
+  body.position.y=.045;body.castShadow=true;worker.add(body);
+  const helmet=new THREE.Mesh(new THREE.SphereGeometry(.045,10,6,0,Math.PI*2,0,Math.PI/2),helmetMat);
+  helmet.position.y=.105;helmet.castShadow=true;worker.add(helmet);
+  apparatus.add(worker);
+  const p0=descentPoint(0,data.maxSteps);worker.position.copy(p0);orientRadial(worker,p0);
+  descentStates.set(id,{apparatus,worker,step:0,nextAt:performance.now()+900,last:p0.clone()});
+}
+function DescentSystem(now){
+  let moving=false;
+  for(const id of ecs.query(C.DescentIdentity,C.RenderObject)){
+    const data=C.DescentIdentity.get(id),st=descentStates.get(id);if(!st)continue;
+    if(st.step>=data.maxSteps)continue;
+    if(now<st.nextAt)continue;
+    const nextStep=st.step+1;
+    const p=descentPoint(nextStep,data.maxSteps);
+    addTrenchSegment(st,st.last,p);
+    st.worker.position.copy(p);orientRadial(st.worker,p);
+    if(nextStep%data.torchEvery===0)addTorch(st,p);
+    st.last.copy(p);st.step=nextStep;st.nextAt=now+data.stepMs;
+    window.vestibuleDirty=true;moving=true;
+  }
+  return moving;
+}
+for(const id of ecs.query(C.DescentIdentity,C.RenderObject))buildDescentIdentity(id,C.DescentIdentity.get(id));
 
 const presences=presenceEntities.map(id=>C.RenderObject.get(id).object);
 
@@ -888,6 +971,7 @@ addEventListener('resize',()=>{
 
 renderer.setAnimationLoop((now)=>{
   ExchangeSystem(now);
+  DescentSystem(now);
   if(entryMotion){
     const m=entryMotion,raw=Math.min(1,(now-m.started)/m.duration),t=easeQuiet(raw);
     const tr=C.Transform.get(m.id);
