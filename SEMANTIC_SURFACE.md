@@ -120,6 +120,20 @@ Transforms own world state. Three.js objects are render representations, not sem
 
 Current project identity components include exchange, descent/access, Foundry retrieval, and orbital behavior. This is not an invitation to build a general-purpose engine. Architecture expands only when executable evidence requires it.
 
+### Continuity boundary
+
+World Lab owns one versioned, session-scoped `WorldState` for meaningful continuity across lab departure, Browser Back, BFCache restoration, and document reconstruction.
+
+`WorldState` persists semantic simulation facts, not Three.js objects. Rendering is disposable: meshes and groups may be reconstructed from authoritative state.
+
+This continuity boundary does **not** make World Lab the behavioral owner of every simulation. Each identity system retains its own authority. Cross-system persistence contains only the smallest shared facts required to preserve relationships that have actually been earned.
+
+Vertical Accretion spoil is the canonical example. Vertical Accretion produces spoil with stable semantic identity. Foundry may independently claim, carry, and remove that same spoil. Persistence preserves the shared identity and the claim relationship without making either subsystem own the other's behavior or coupling them through rendered objects.
+
+Stable persistent identity is therefore introduced selectively, where reconstruction of a real relationship requires it, rather than promoted into a universal entity requirement.
+
+Navigation is outside this ontology. Camera Commit and departure are ephemeral, exactly-once transactions: they may checkpoint the world, but executable navigation intent is never persistent world state. BFCache is likewise an optimization, not the definition of continuity; live restoration and reconstruction obey the same semantic contract.
+
 ## Observer and world boundaries
 
 The dome and ground are physical observer bounds. Camera travel is not governed by an arbitrary zoom leash.
@@ -133,7 +147,9 @@ The world intentionally contains no paths, pedestals, landmarks, environmental a
 - Startup, runtime, promise, WebGL, and shader failures fail visibly.
 - Touch and mouse orbit/pan/pinch remain available.
 - Foreground selection is reversible and restores observer state transactionally.
-- Lab departure preserves Back/return continuity.
+- Lab departure preserves Back/return continuity without persisting or replaying navigation intent.
+- Meaningful simulation continuity belongs to versioned semantic WorldState; rendered objects remain reconstructable views.
+- Cross-system relationships persist through shared semantic identity only where executable evidence has earned that relationship.
 - Destination preconnect may begin on foreground focus; speculative destination execution does not.
 - The common white marble remains recognizable beneath every project identity.
 - The unassigned fifth presence remains semantically empty until evidence assigns it.
@@ -170,7 +186,11 @@ human intention
 
 Ordinary implementation decisions belong to the implementation pass. Human inspection determines whether the resulting behavior earns permanence.
 
-The executable is primary evidence. This semantic surface records the current interpretation of that evidence. Implementation archaeology belongs in the executable where it remains useful; this document describes the present-tense object rather than replaying its construction history.
+The executable is primary evidence. This semantic surface records the current durable interpretation of that evidence: what the system is, what owns what, and which earned boundaries must survive future realizations. It is intentionally not a prose copy of the semantic material embedded in the current artifact.
+
+Implementation-local archaeology may remain embedded where it helps a future realization understand itself. Repository-level change records in `/changes` preserve the intent, evidence, constraints, outcome, and historical reason an important boundary was earned. This document remains present-tense semantic authority rather than replaying that history.
+
+As implementations become more transient or regenerable, this outer semantic surface is expected to carry more of the durable truth that a successor realization must preserve.
 
 ## Current semantic center
 
