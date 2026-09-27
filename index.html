@@ -140,23 +140,30 @@ small camera/orbit changes made the menu jitter and visually chase the marble. T
 is therefore viewport-owned, fixed at bottom center. Physical inspection and interface stability
 are intentionally decoupled.
 
-BACK / RETURN CONTINUITY
-ENTER LAB snapshots the focused presence and observer state at the start of Camera Commit, while
-the project is still in its stable inspection pose. The later near-object commit pose is deliberately
-not persisted. GitHub snapshots at departure because it performs no camera commit. Browser Back
-therefore returns to the same inspectable focused project rather than a close-up/white-out terminal
-entry frame or a fresh vestibule visit. If the browser restores the document through bfcache, the preserved
-live ECS/camera state remains authoritative and the fallback snapshot is discarded. If the document
-is reconstructed, pageshow consumes the snapshot once and restores foreground state, observer pose,
-dismissal return pose, contextual actions, and preconnect. Fresh visits remain ordinary ring starts.
-GitHub departures use the same continuity rule.
+BACK / WORLD CONTINUITY
+World Lab owns one versioned session WorldState. It persists semantic simulation state rather than
+Three.js representation: observer/focus state; Vertical Accretion route, stock/path progress, worker
+run, RNG and spoil physics; Foundry drones plus stable references to shared spoil; and Six Cities
+exchange scheduler, RNG and active packet progression. Meshes/groups remain disposable views and are
+reconstructed from that state when the document is rebuilt. BFCache may preserve the live ECS world
+as an optimization, but it no longer defines continuity.
 
-RETURN-SNAPSHOT CORRECTION
-The first implementation captured ENTER LAB state inside finishEntry(), after Camera Commit had
-already moved the observer roughly 92% of the distance to the marble. Reconstructed Back navigation
-therefore restored an almost surface-level white view; a drag appeared to recover orbit only because
-it perturbed that bad restored camera. Snapshot ownership moved to beginEntry(), before any commit
-motion, so return continuity now preserves the actual inspection state.
+Navigation is deliberately outside WorldState. ENTER LAB checkpoints the stable inspection state
+before Camera Commit, then Camera Commit runs. finishEntry consumes
+entryMotion before assigning location.href. A BFCache return therefore cannot resume a completed
+Camera Commit and phantom-enter the same lab. pagehide/visibility lifecycle saves are suppressed only once navigation begins
+during sealed departure so the terminal commit camera cannot overwrite the inspection checkpoint.
+On pageshow from BFCache only ephemeral motion/departure state is cleared; on document reconstruction
+the versioned WorldState rebuilds meaningful world identity. Session storage intentionally limits
+continuity to the current tab/session rather than creating a permanent save game.
+
+CONTINUITY ARCHAEOLOGY
+The predecessor used a one-shot return snapshot containing only foreground presence and observer pose.
+That solved reconstructed Back framing but left simulation identity dependent on BFCache. More
+importantly, Camera Commit left its completed entryMotion live across navigation. BFCache restored that
+executable departure intent; the resumed animation loop immediately called finishEntry again, producing
+the observed World Lab flash followed by automatic re-entry and a damaged-feeling Back sequence.
+The repair separates durable world state from ephemeral commands and makes departure exactly-once.
 
 APPARATUS UI RETIREMENT
 The persistent lower-right Home/apparatus control was removed after camera interaction became
@@ -490,8 +497,7 @@ function buildOrbitalIdentity(id,data){
   const station=new THREE.Group();orbitRoot.add(station);
   // Primary hub and orthogonal pressure grammar.
   const hub=new THREE.Mesh(new THREE.CylinderGeometry(.105,.105,.080,8),orbitalHull2Mat);
-  hub.rotation.x=Math.PI/2;hub.castShadow=true;station.add(hub);
-  const arms=[
+  hub.rotation.x=Math.PI/2;hub.castShadow=true;station.add(hub);  const arms=[
     [new THREE.Vector3(.07,0,0),new THREE.Vector3(.34,0,0)],
     [new THREE.Vector3(-.07,0,0),new THREE.Vector3(-.30,0,0)],
     [new THREE.Vector3(0,0,.07),new THREE.Vector3(0,0,.29)],
@@ -822,8 +828,12 @@ const NODE_DIRS=[
 ];
 function seeded(seed){
   let x=seed>>>0;
-  return ()=>{x=(Math.imul(x,1664525)+1013904223)>>>0;return x/4294967296};
+  const next=()=>{x=(Math.imul(x,1664525)+1013904223)>>>0;return x/4294967296};
+  next.getState=()=>x>>>0;
+  next.setState=v=>{x=(v>>>0)};
+  return next;
 }
+
 function buildExchangeIdentity(id,data){
   const root=C.RenderObject.get(id).object;
   const apparatus=new THREE.Group();root.add(apparatus);
@@ -881,7 +891,7 @@ function tryLaunchExchange(id,now){
   }
   if(!candidates.length)return scheduleNext(state,data,now);
   const route=candidates[Math.floor(state.rng()*candidates.length)];
-  const mat=packetMats[Math.floor(state.rng()*packetMats.length)];
+  const matIndex=Math.floor(state.rng()*packetMats.length),mat=packetMats[matIndex];
   const packet=new THREE.Group();
   const scales=[.30,.40,.54,.40,.30]; // teeny -> tiny -> small -> tiny -> teeny
   const bearings=scales.map(scale=>{
@@ -892,7 +902,7 @@ function tryLaunchExchange(id,now){
   state.apparatus.add(packet);
   const duration=data.packetDuration[0]+(data.packetDuration[1]-data.packetDuration[0])*state.rng();
   const stagger=duration*.105;
-  state.routes.push(route);state.active.push({packet,bearings,route,started:now,duration,stagger});
+  state.routes.push(route);state.active.push({packet,bearings,route,started:now,duration,stagger,matIndex});
   scheduleNext(state,data,now);
 }
 function ExchangeSystem(now){
@@ -935,6 +945,7 @@ for(const id of ecs.query(C.ExchangeIdentity,C.RenderObject)){
 
 // VERTICAL ACCRETION IDENTITY — finite stock whose own constructed graph is the only shuttle route.
 const descentStates=new Map(),spoil=[];
+let nextSpoilId=1;
 const workerCreamMat=new THREE.MeshStandardMaterial({color:0xd8c6a1,roughness:.80,metalness:.01});
 const workerDarkMat=new THREE.MeshStandardMaterial({color:0x626663,roughness:.78,metalness:.04});
 const plankMat=new THREE.MeshStandardMaterial({color:0x8a6540,roughness:.88,metalness:0});
@@ -984,9 +995,8 @@ function spawnSpoil(id,p,step){
   const mesh=new THREE.Mesh(spoilGeo,spoilMat);mesh.castShadow=false;mesh.receiveShadow=false;mesh.position.copy(world);scene.add(mesh);
   const a=(step*2.399963229728653)%(Math.PI*2),speed=.12+(step%5)*.018;
   const v=new THREE.Vector3(Math.cos(a)*speed,.035+((step*7)%4)*.018,Math.sin(a)*speed);
-  spoil.push({mesh,v,r:.034,sleep:false,quiet:0});spoilActive=true;
-}
-function buildDescentIdentity(id,data){
+  spoil.push({id:nextSpoilId++,mesh,v,r:.034,sleep:false,quiet:0,delivered:false,claimedBy:null});spoilActive=true;
+}function buildDescentIdentity(id,data){
   const ro=C.RenderObject.get(id);if(!ro)return;const apparatus=new THREE.Group();ro.object.add(apparatus);
   const worker=new THREE.Group();
   // Pictographic worker: warm cream sphere head + subtly tapered cylindrical body.
@@ -1282,7 +1292,8 @@ githubLabEl.addEventListener('click',e=>{
   e.stopPropagation();
   const url=selectedEntity?C.LabIdentity.get(selectedEntity)?.github:null;
   if(url){
-    captureReturnState(selectedEntity);
+    checkpointForDeparture();
+    departing=true;
     window.location.href=url;
   }
 });
@@ -1300,89 +1311,172 @@ const PreconnectSystem={
   }
 };
 
-const VESTIBULE_RETURN_KEY='worldLab.vestibule.return.v1';
+const WORLD_STATE_KEY='worldLab.worldState.v1';
+const WORLD_STATE_VERSION=1;
+let departing=false,lastWorldSave=0;
 
-function captureReturnState(id){
-  if(!id||!ecs.has(id,C.Foregrounded))return;
-  const presence=C.Presence.get(id);
-  const transform=C.Transform.get(id);
-  const saved=C.ObserverReturn.get(id);
-  if(!presence||!transform)return;
-  const payload={
-    slot:presence.slot,
-    position:transform.position.toArray(),
-    cameraPosition:camera.position.toArray(),
-    target:target.toArray(),
-    radius,theta,phi,
-    observerReturn:saved?{
-      cameraPosition:saved.cameraPosition.toArray(),
-      target:saved.target.toArray(),
-      radius:saved.radius,theta:saved.theta,phi:saved.phi
-    }:null
+function slotForId(id){return id==null?null:C.Presence.get(id)?.slot??null}
+function idForSlot(slot){return presenceEntities.find(id=>C.Presence.get(id).slot===slot)||null}
+function vec(v){return v?.toArray?v.toArray():v}
+function remaining(at,now){return Number.isFinite(at)?Math.max(0,at-now):null}
+
+function captureObserverState(){
+  const id=selectedEntity,saved=id?C.ObserverReturn.get(id):null,transform=id?C.Transform.get(id):null;
+  return {
+    selectedSlot:slotForId(id),
+    selectedPosition:transform?transform.position.toArray():null,
+    cameraPosition:camera.position.toArray(),target:target.toArray(),radius,theta,phi,
+    observerReturn:saved?{cameraPosition:saved.cameraPosition.toArray(),target:saved.target.toArray(),radius:saved.radius,theta:saved.theta,phi:saved.phi}:null
   };
-  try{sessionStorage.setItem(VESTIBULE_RETURN_KEY,JSON.stringify(payload))}
-  catch(e){console.warn('Vestibule return state unavailable',e)}
 }
-
-function restoreReturnState(){
-  let raw=null;
-  try{
-    raw=sessionStorage.getItem(VESTIBULE_RETURN_KEY);
-    if(raw)sessionStorage.removeItem(VESTIBULE_RETURN_KEY); // one return, not a new default
-  }catch(e){console.warn('Vestibule return state unavailable',e)}
-  if(!raw)return false;
-  try{
-    const state=JSON.parse(raw);
-    const id=presenceEntities.find(id=>C.Presence.get(id).slot===state.slot);
-    if(!id||!ecs.has(id,C.LabIdentity)||!ecs.has(id,C.Destination))return false;
-
-    const transform=C.Transform.get(id);
-    transform.position.fromArray(state.position);
-    RenderSyncSystem.sync();
-
-    camera.position.fromArray(state.cameraPosition);
-    target.fromArray(state.target);
-    radius=state.radius;theta=state.theta;phi=state.phi;
-    camera.lookAt(target);
-
-    ecs.add(id,C.Foregrounded,true);
-    selectedEntity=id;
-    if(state.observerReturn){
-      ecs.add(id,C.ObserverReturn,{
-        cameraPosition:new THREE.Vector3().fromArray(state.observerReturn.cameraPosition),
-        target:new THREE.Vector3().fromArray(state.observerReturn.target),
-        radius:state.observerReturn.radius,
-        theta:state.observerReturn.theta,
-        phi:state.observerReturn.phi
-      });
+function captureWorldState(now=performance.now()){
+  const descent=[];
+  for(const [id,st] of descentStates){
+    descent.push({slot:slotForId(id),laid:st.laid,phase:st.phase,route:st.route,step:st.step,
+      nextIn:remaining(st.nextAt,now),rng:st.rng.getState?.(),
+      run:st.run?{kind:st.run.kind,index:st.run.index,fromIndex:st.run.fromIndex,toIndex:st.run.toIndex,duration:st.run.duration,elapsed:Math.max(0,now-st.run.started)}:null});
+  }
+  const rocks=spoil.filter(r=>!r.delivered).map(r=>({id:r.id,position:r.mesh.position.toArray(),velocity:r.v.toArray(),r:r.r,sleep:!!r.sleep,quiet:r.quiet||0}));
+  const foundry=[];
+  for(const [id,st] of foundryStates){
+    foundry.push({slot:slotForId(id),nextLaunchIn:remaining(st.nextLaunch,now),drones:st.drones.map(d=>({
+      state:d.state,position:d.group.position.toArray(),rockId:d.rock?.id??null,speed:d.speed,
+      returnPath:(d.returnPath||[]).map(vec),returnIndex:d.returnIndex||0,returnAnchor:d.returnAnchor?d.returnAnchor.toArray():null
+    }))});
+  }
+  const exchange=[];
+  for(const [id,st] of exchangeStates){
+    exchange.push({slot:slotForId(id),rng:st.rng.getState?.(),nextIn:remaining(st.nextAt,now),active:st.active.map(p=>({
+      a:p.route.a,b:p.route.b,duration:p.duration,stagger:p.stagger,elapsed:Math.max(0,now-p.started),matIndex:p.matIndex??0
+    }))});
+  }
+  return {version:WORLD_STATE_VERSION,savedAt:Date.now(),observer:captureObserverState(),descent,rocks,foundry,exchange};
+}
+function saveWorldState({force=false}={}){
+  if(departing)return false;
+  const now=performance.now();if(!force&&now-lastWorldSave<900)return false;
+  try{sessionStorage.setItem(WORLD_STATE_KEY,JSON.stringify(captureWorldState(now)));lastWorldSave=now;return true}
+  catch(e){console.warn('WorldState save unavailable',e);return false}
+}
+function clearDynamicWorldForRestore(){
+  for(const r of spoil)r.mesh.removeFromParent();spoil.length=0;nextSpoilId=1;
+  for(const st of foundryStates.values()){for(const d of st.drones)d.group.removeFromParent();st.drones.length=0}
+  for(const st of exchangeStates.values()){for(const p of st.active)st.apparatus.remove(p.packet);st.active.length=0;st.routes.length=0}
+}
+function restoreDescentState(saved,now){
+  for(const ds of saved||[]){
+    const id=idForSlot(ds.slot),st=id?descentStates.get(id):null;if(!st)continue;
+    st.torches.forEach(t=>st.apparatus.remove(t.group));st.torches.length=0;
+    for(const m of st.planks){m.removeFromParent();st.apparatus.add(m);m.visible=true}
+    st.laid=THREE.MathUtils.clamp(ds.laid|0,0,st.stock);st.phase=ds.phase==='recover'?'recover':'build';st.route=ds.route|0;st.step=ds.step|0;
+    if(ds.rng!=null)st.rng.setState?.(ds.rng);
+    for(let i=0;i<st.laid;i++)placePlank(st,i);
+    arrangeLumberPile(st);placeStockTorch(st);
+    st.run=null;st.nextAt=now+(ds.nextIn??250);
+    if(ds.run){
+      const q=ds.run;st.run={kind:q.kind,index:q.index,fromIndex:q.fromIndex,toIndex:q.toIndex,duration:q.duration,started:now-Math.min(q.elapsed||0,q.duration)};st.nextAt=Infinity;
+      if(q.kind==='toFrontier'||q.kind==='salvageHome')carry(st,q.index,true);
     }else{
-      // Defensive fallback: dismissal still has a valid ring/home transaction.
-      ecs.add(id,C.ObserverReturn,{
-        cameraPosition:HOME.camera.clone(),target:HOME.target.clone(),
-        radius:HOME.radius,theta:HOME.theta,phi:HOME.phi
-      });
+      const idx=st.phase==='recover'?Math.max(0,st.laid):0,p=accessPoint(idx,st.route);st.worker.position.copy(p.clone().normalize().multiplyScalar(.594));orientWorkerStable(st.worker,p,st.route,idx);
     }
-    updateLabLabel();
-    setLabActions(id);
-    PreconnectSystem.begin(id);
-    window.vestibuleDirty=true;
-    return true;
-  }catch(e){
-    console.warn('Vestibule return restore failed',e);
-    return false;
   }
 }
+function restoreRocks(saved){
+  for(const rs of saved||[]){
+    const mesh=new THREE.Mesh(spoilGeo,spoilMat);mesh.castShadow=false;mesh.receiveShadow=false;mesh.position.fromArray(rs.position);scene.add(mesh);
+    const r={id:rs.id|0,mesh,v:new THREE.Vector3().fromArray(rs.velocity||[0,0,0]),r:rs.r||.034,sleep:!!rs.sleep,quiet:rs.quiet||0,delivered:false,claimedBy:null};
+    spoil.push(r);nextSpoilId=Math.max(nextSpoilId,r.id+1);
+  }
+  spoilActive=spoil.some(r=>!r.sleep);lastSpoilNow=performance.now();
+}
+function restoreFoundryState(saved,now){
+  const rocks=new Map(spoil.map(r=>[r.id,r])),claimedRockIds=new Set();
+  for(const fs of saved||[]){
+    const id=idForSlot(fs.slot),st=id?foundryStates.get(id):null;if(!st)continue;st.nextLaunch=now+(fs.nextLaunchIn??300);
+    for(const ds of fs.drones||[]){
+      const d=makeFoundryDrone(st);d.group.position.fromArray(ds.position);d.state=ds.state||'seeking';d.speed=ds.speed||.82;
+      d.returnPath=(ds.returnPath||[]).map(a=>new THREE.Vector3().fromArray(a));d.returnIndex=ds.returnIndex||0;d.returnAnchor=ds.returnAnchor?new THREE.Vector3().fromArray(ds.returnAnchor):null;
+      d.rock=ds.rockId!=null?rocks.get(ds.rockId)||null:null;
+      if(d.rock&&claimedRockIds.has(d.rock.id)){d.group.removeFromParent();st.drones.pop();continue}
+      if(d.rock){claimedRockIds.add(d.rock.id);d.rock.claimedBy=d}
+      if((d.state==='toRock'||d.state==='launchClear'||d.state==='homePath'||d.state==='homeIngress')&&!d.rock){d.group.removeFromParent();st.drones.pop()}
+      else if(d.rock&&(d.state==='homePath'||d.state==='homeIngress')){d.rock.sleep=true;d.rock.v.set(0,0,0);d.rock.mesh.position.copy(d.group.position).add(new THREE.Vector3(0,-.040,0))}
+    }
+  }
+  lastFoundryNow=now;
+}
+function restoreExchangeState(saved,now){
+  for(const es of saved||[]){
+    const id=idForSlot(es.slot),st=id?exchangeStates.get(id):null;if(!st)continue;if(es.rng!=null)st.rng.setState?.(es.rng);st.nextAt=now+(es.nextIn??400);
+    for(const ps of es.active||[]){
+      const route={a:ps.a,b:ps.b,samples:routeSamples(NODE_DIRS[ps.a],NODE_DIRS[ps.b])},packet=new THREE.Group(),matIndex=ps.matIndex??0,mat=packetMats[matIndex]||packetMats[0];
+      const scales=[.30,.40,.54,.40,.30],bearings=scales.map(scale=>{const b=new THREE.Mesh(bearingGeo,mat);b.scale.setScalar(scale);b.castShadow=true;b.receiveShadow=true;b.visible=false;packet.add(b);return b});
+      st.apparatus.add(packet);st.routes.push(route);st.active.push({packet,bearings,route,started:now-(ps.elapsed||0),duration:ps.duration,stagger:ps.stagger,matIndex});
+    }
+  }
+}
+function restoreObserverState(o){
+  if(!o)return;
+  if(selectedEntity){ecs.remove(selectedEntity,C.Foregrounded);ecs.remove(selectedEntity,C.ObserverReturn)}selectedEntity=null;
+  if(o.cameraPosition)camera.position.fromArray(o.cameraPosition);if(o.target)target.fromArray(o.target);radius=o.radius??radius;theta=o.theta??theta;phi=o.phi??phi;camera.lookAt(target);
+  const id=o.selectedSlot!=null?idForSlot(o.selectedSlot):null;
+  if(id){const transform=C.Transform.get(id);if(o.selectedPosition)transform.position.fromArray(o.selectedPosition);RenderSyncSystem.sync();ecs.add(id,C.Foregrounded,true);selectedEntity=id;
+    const q=o.observerReturn;ecs.add(id,C.ObserverReturn,q?{cameraPosition:new THREE.Vector3().fromArray(q.cameraPosition),target:new THREE.Vector3().fromArray(q.target),radius:q.radius,theta:q.theta,phi:q.phi}:{cameraPosition:HOME.camera.clone(),target:HOME.target.clone(),radius:HOME.radius,theta:HOME.theta,phi:HOME.phi});PreconnectSystem.begin(id)}
+  updateLabLabel();setLabActions(id);window.vestibuleDirty=true;
+}
+function validateWorldState(state){
+  if(!state||state.version!==WORLD_STATE_VERSION)throw new Error('Incompatible WorldState schema');
+  for(const key of ['descent','rocks','foundry','exchange'])if(state[key]!=null&&!Array.isArray(state[key]))throw new Error('Malformed WorldState '+key);
+  const rockIds=new Set();
+  for(const r of state.rocks||[]){
+    if(!Number.isInteger(r.id)||r.id<=0||rockIds.has(r.id))throw new Error('Malformed or duplicate spoil identity');
+    if(!Array.isArray(r.position)||r.position.length!==3||!r.position.every(Number.isFinite))throw new Error('Malformed spoil position');
+    rockIds.add(r.id);
+  }
+  const claims=new Set();
+  for(const f of state.foundry||[])for(const d of f.drones||[]){
+    if(d.rockId==null)continue;
+    if(!rockIds.has(d.rockId))continue; // orphaned drone is safely discarded by restore
+    if(claims.has(d.rockId))throw new Error('Duplicate Foundry spoil claim');
+    claims.add(d.rockId);
+  }
+  return state;
+}
+function applyWorldState(state,now){
+  clearDynamicWorldForRestore();
+  restoreDescentState(state.descent,now);restoreRocks(state.rocks);restoreFoundryState(state.foundry,now);restoreExchangeState(state.exchange,now);restoreObserverState(state.observer);
+}
+function restoreCheckpointObserver(){
+  let raw=null;try{raw=sessionStorage.getItem(WORLD_STATE_KEY)}catch(e){console.warn('WorldState observer restore unavailable',e)}if(!raw)return false;
+  try{const state=validateWorldState(JSON.parse(raw));restoreObserverState(state.observer);return true}
+  catch(e){console.warn('WorldState observer restore failed',e);return false}
+}
+function restoreWorldState(){
+  let raw=null;try{raw=sessionStorage.getItem(WORLD_STATE_KEY)}catch(e){console.warn('WorldState restore unavailable',e)}if(!raw)return false;
+  const now=performance.now(),fallback=captureWorldState(now);
+  try{
+    const state=validateWorldState(JSON.parse(raw));applyWorldState(state,now);
+    lastWorldSave=now;window.vestibuleDirty=true;return true;
+  }catch(e){
+    console.warn('WorldState restore failed; rolling back to live world',e);try{sessionStorage.removeItem(WORLD_STATE_KEY)}catch(_){}
+    try{applyWorldState(fallback,performance.now())}catch(rollbackError){vestibuleFail('WorldState rollback',rollbackError)}
+    window.vestibuleDirty=true;return false;
+  }
+}
+function checkpointForDeparture(){return saveWorldState({force:true})}
 
 function finishEntry(id){
   const destination=C.Destination.get(id)?.url;
-  if(destination) location.href=destination;
+  if(!destination){entryMotion=null;return}
+  // Consume executable departure intent BEFORE navigation. A BFCache-restored page can never replay it.
+  entryMotion=null;departing=true;location.href=destination;
 }
 
 function beginEntry(id){
   if(entryMotion||presenceMotion||!ecs.has(id,C.Destination))return;
   // Return continuity belongs to the stable inspection pose, not the terminal
   // Camera Commit pose. Snapshot before entry starts moving the observer.
-  captureReturnState(id);
+  checkpointForDeparture();
   const t=C.Transform.get(id);
   const distance=camera.position.distanceTo(t.position);
   entryMotion={
@@ -1401,8 +1495,7 @@ const SelectionSystem={
     for(const id of ecs.query(C.Selectable,C.RenderObject))
       if(C.Selectable.get(id).enabled)pickables.push(...C.RenderObject.get(id).pickables);
     for(const hit of raycaster.intersectObjects(pickables,false)){
-      const id=hit.object.userData.entityId;
-      if(id&&ecs.has(id,C.Selectable))return id;
+      const id=hit.object.userData.entityId;      if(id&&ecs.has(id,C.Selectable))return id;
     }
     return null;
   },
@@ -1505,19 +1598,23 @@ renderer.setAnimationLoop((now)=>{
       presenceMotion=null;
     }
   }
+  if(!departing&&(now-lastWorldSave>1000))saveWorldState();
   if(window.vestibuleDirty!==false){renderer.render(scene,camera);window.vestibuleDirty=false}
 });
 
 
+addEventListener('pagehide',()=>{if(!departing)saveWorldState({force:true})});
+addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&!departing)saveWorldState({force:true})});
 addEventListener('pageshow',e=>{
+  // BFCache restores the live simulation. Clear ephemeral departure state, then reconcile the stable observer checkpoint.
+  departing=false;entryMotion=null;presenceMotion=null;
   if(e.persisted){
-    try{sessionStorage.removeItem(VESTIBULE_RETURN_KEY)}catch(_){}
-    updateLabLabel();
-    setLabActions(selectedEntity);
-    window.vestibuleDirty=true;
-    return;
+    // The live simulation is valuable, but Camera Commit left the live observer at its terminal pose.
+    // Reconcile only the stable pre-departure observer checkpoint; do not rewind the simulated world.
+    if(!restoreCheckpointObserver()){updateLabLabel();setLabActions(selectedEntity)}
+    saveWorldState({force:true});window.vestibuleDirty=true;return
   }
-  restoreReturnState();
+  restoreWorldState();
 });
 
 window.vestibule={
