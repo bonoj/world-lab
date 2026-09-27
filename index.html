@@ -148,6 +148,13 @@ exchange scheduler, RNG and active packet progression. Meshes/groups remain disp
 reconstructed from that state when the document is rebuilt. BFCache may preserve the live ECS world
 as an optimization, but it no longer defines continuity.
 
+WorldState is a continuity boundary, not a new owner of every simulation. Each identity system retains
+its behavioral authority. Cross-system coupling occurs through the smallest shared semantic facts that
+have earned persistence. The current important example is spoil: Vertical Accretion produces physical
+spoil with stable identity; Foundry may independently claim, carry, and remove that same spoil; WorldState
+preserves the identity and relationship without making either system own the other's behavior. Stable
+identity is introduced only where restoration of a real relationship requires it.
+
 Navigation is deliberately outside WorldState. ENTER LAB checkpoints the stable inspection state
 before Camera Commit, then Camera Commit runs. finishEntry consumes
 entryMotion before assigning location.href. A BFCache return therefore cannot resume a completed
